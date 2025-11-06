@@ -2,23 +2,34 @@
  *  Debugging routines
  *
  *  Copyright The Mbed TLS Contributors
- *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
+ *  SPDX-License-Identifier: Apache-2.0
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may
+ *  not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
  */
 
-#include "ssl_misc.h"
+#include "common.h"
 
 #if defined(MBEDTLS_DEBUG_C)
 
 #include "mbedtls/platform.h"
 
-#include "debug_internal.h"
+#include "mbedtls/debug.h"
 #include "mbedtls/error.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
-/* DEBUG_BUF_SIZE must be at least 2 */
 #define DEBUG_BUF_SIZE      512
 
 static int debug_threshold = 0;
@@ -58,8 +69,6 @@ void mbedtls_debug_print_msg(const mbedtls_ssl_context *ssl, int level,
     char str[DEBUG_BUF_SIZE];
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
 
-    MBEDTLS_STATIC_ASSERT(DEBUG_BUF_SIZE >= 2, "DEBUG_BUF_SIZE too small");
-
     if (NULL == ssl              ||
         NULL == ssl->conf        ||
         NULL == ssl->conf->f_dbg ||
@@ -71,15 +80,10 @@ void mbedtls_debug_print_msg(const mbedtls_ssl_context *ssl, int level,
     ret = mbedtls_vsnprintf(str, DEBUG_BUF_SIZE, format, argp);
     va_end(argp);
 
-    if (ret < 0) {
-        ret = 0;
-    } else {
-        if (ret >= DEBUG_BUF_SIZE - 1) {
-            ret = DEBUG_BUF_SIZE - 2;
-        }
+    if (ret >= 0 && ret < DEBUG_BUF_SIZE - 1) {
+        str[ret]     = '\n';
+        str[ret + 1] = '\0';
     }
-    str[ret]     = '\n';
-    str[ret + 1] = '\0';
 
     debug_send_line(ssl, level, file, line, str);
 }
@@ -100,7 +104,7 @@ void mbedtls_debug_print_ret(const mbedtls_ssl_context *ssl, int level,
     /*
      * With non-blocking I/O and examples that just retry immediately,
      * the logs would be quickly flooded with WANT_READ, so ignore that.
-     * Don't ignore WANT_WRITE however, since it is usually rare.
+     * Don't ignore WANT_WRITE however, since is is usually rare.
      */
     if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
         return;
@@ -132,6 +136,7 @@ void mbedtls_debug_print_buf(const mbedtls_ssl_context *ssl, int level,
 
     debug_send_line(ssl, level, file, line, str);
 
+    idx = 0;
     memset(txt, 0, sizeof(txt));
     for (i = 0; i < len; i++) {
         if (i >= 4096) {
@@ -166,6 +171,28 @@ void mbedtls_debug_print_buf(const mbedtls_ssl_context *ssl, int level,
         debug_send_line(ssl, level, file, line, str);
     }
 }
+
+#if defined(MBEDTLS_ECP_C)
+void mbedtls_debug_print_ecp(const mbedtls_ssl_context *ssl, int level,
+                             const char *file, int line,
+                             const char *text, const mbedtls_ecp_point *X)
+{
+    char str[DEBUG_BUF_SIZE];
+
+    if (NULL == ssl              ||
+        NULL == ssl->conf        ||
+        NULL == ssl->conf->f_dbg ||
+        level > debug_threshold) {
+        return;
+    }
+
+    mbedtls_snprintf(str, sizeof(str), "%s(X)", text);
+    mbedtls_debug_print_mpi(ssl, level, file, line, str, &X->X);
+
+    mbedtls_snprintf(str, sizeof(str), "%s(Y)", text);
+    mbedtls_debug_print_mpi(ssl, level, file, line, str, &X->Y);
+}
+#endif /* MBEDTLS_ECP_C */
 
 #if defined(MBEDTLS_BIGNUM_C)
 void mbedtls_debug_print_mpi(const mbedtls_ssl_context *ssl, int level,
@@ -218,176 +245,7 @@ void mbedtls_debug_print_mpi(const mbedtls_ssl_context *ssl, int level,
 }
 #endif /* MBEDTLS_BIGNUM_C */
 
-#if defined(MBEDTLS_X509_CRT_PARSE_C) && !defined(MBEDTLS_X509_REMOVE_INFO)
-
-#if defined(PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY) || defined(PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY)
-static void mbedtls_debug_print_integer(const mbedtls_ssl_context *ssl, int level,
-                                        const char *file, int line, const char *text,
-                                        const unsigned char *buf, size_t bitlen)
-{
-    char str[DEBUG_BUF_SIZE];
-    size_t i, len_bytes = PSA_BITS_TO_BYTES(bitlen), idx = 0;
-
-    mbedtls_snprintf(str + idx, sizeof(str) - idx, "value of '%s' (%u bits) is:\n",
-                     text, (unsigned int) bitlen);
-
-    debug_send_line(ssl, level, file, line, str);
-
-    for (i = 0; i < len_bytes; i++) {
-        if (i >= 4096) {
-            break;
-        }
-
-        if (i % 16 == 0) {
-            if (i > 0) {
-                mbedtls_snprintf(str + idx, sizeof(str) - idx, "\n");
-                debug_send_line(ssl, level, file, line, str);
-
-                idx = 0;
-            }
-        }
-
-        idx += mbedtls_snprintf(str + idx, sizeof(str) - idx, " %02x",
-                                (unsigned int) buf[i]);
-    }
-
-    if (len_bytes > 0) {
-        mbedtls_snprintf(str + idx, sizeof(str) - idx, "\n");
-        debug_send_line(ssl, level, file, line, str);
-    }
-}
-#endif /* PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY || PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY */
-
-#if defined(PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY)
-static void mbedtls_debug_print_psa_ec(const mbedtls_ssl_context *ssl, int level,
-                                       const char *file, int line,
-                                       const char *text, const mbedtls_pk_context *pk)
-{
-    char str[DEBUG_BUF_SIZE];
-    const uint8_t *coord_start;
-    size_t coord_len;
-
-    if (NULL == ssl              ||
-        NULL == ssl->conf        ||
-        NULL == ssl->conf->f_dbg ||
-        level > debug_threshold) {
-        return;
-    }
-
-    /* For the description of pk->pk_raw content please refer to the description
-     * psa_export_public_key() function. */
-    coord_len = (pk->pub_raw_len - 1)/2;
-
-    /* X coordinate */
-    coord_start = pk->pub_raw + 1;
-    mbedtls_snprintf(str, sizeof(str), "%s(X)", text);
-    mbedtls_debug_print_integer(ssl, level, file, line, str, coord_start, coord_len * 8);
-
-    /* Y coordinate */
-    coord_start = coord_start + coord_len;
-    mbedtls_snprintf(str, sizeof(str), "%s(Y)", text);
-    mbedtls_debug_print_integer(ssl, level, file, line, str, coord_start, coord_len * 8);
-}
-#endif /* PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY */
-
-#if defined(PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY)
-static size_t debug_count_valid_bits(unsigned char **buf, size_t len)
-{
-    size_t i, bits;
-
-    /* Ignore initial null bytes (if any). */
-    while ((len > 0) && (**buf == 0x00)) {
-        (*buf)++;
-        len--;
-    }
-
-    if (len == 0) {
-        return 0;
-    }
-
-    bits = len * 8;
-
-    /* Ignore initial null bits (if any). */
-    for (i = 7; i > 0; i--) {
-        if ((**buf & (0x1 << i)) != 0) {
-            break;
-        }
-        bits--;
-    }
-
-    return bits;
-}
-
-static void mbedtls_debug_print_psa_rsa(const mbedtls_ssl_context *ssl, int level,
-                                        const char *file, int line,
-                                        const char *text, const mbedtls_pk_context *pk)
-{
-    char str[DEBUG_BUF_SIZE];
-    /* no-check-names will be removed in mbedtls#10229. */
-    unsigned char key_der[MBEDTLS_PK_MAX_RSA_PUBKEY_RAW_LEN]; //no-check-names
-    unsigned char *start_cur;
-    unsigned char *end_cur;
-    size_t len, bits;
-    int ret;
-
-    if (NULL == ssl              ||
-        NULL == ssl->conf        ||
-        NULL == ssl->conf->f_dbg ||
-        level > debug_threshold) {
-        return;
-    }
-
-    if (pk->pub_raw_len > sizeof(key_der)) {
-        snprintf(str, sizeof(str),
-                 "RSA public key too large: %" MBEDTLS_PRINTF_SIZET " > %" MBEDTLS_PRINTF_SIZET,
-                 pk->pub_raw_len, sizeof(key_der));
-        debug_send_line(ssl, level, file, line, str);
-        return;
-    }
-
-    memcpy(key_der, pk->pub_raw, pk->pub_raw_len);
-    start_cur = key_der;
-    end_cur = key_der + pk->pub_raw_len;
-
-    /* This integer parsing solution should be replaced with mbedtls_asn1_get_integer().
-     * See #10238. */
-    ret = mbedtls_asn1_get_tag(&start_cur, end_cur, &len,
-                               MBEDTLS_ASN1_SEQUENCE | MBEDTLS_ASN1_CONSTRUCTED);
-    if (ret != 0) {
-        return;
-    }
-
-    ret = mbedtls_asn1_get_tag(&start_cur, end_cur, &len, MBEDTLS_ASN1_INTEGER);
-    if (ret != 0) {
-        return;
-    }
-
-    bits = debug_count_valid_bits(&start_cur, len);
-    if (bits == 0) {
-        return;
-    }
-    len = PSA_BITS_TO_BYTES(bits);
-
-    mbedtls_snprintf(str, sizeof(str), "%s.N", text);
-    mbedtls_debug_print_integer(ssl, level, file, line, str, start_cur, bits);
-
-    start_cur += len;
-
-    ret = mbedtls_asn1_get_tag(&start_cur, end_cur, &len, MBEDTLS_ASN1_INTEGER);
-    if (ret != 0) {
-        return;
-    }
-
-    bits = debug_count_valid_bits(&start_cur, len);
-    if (bits == 0) {
-        return;
-    }
-
-    mbedtls_snprintf(str, sizeof(str), "%s.E", text);
-    mbedtls_debug_print_integer(ssl, level, file, line, str, start_cur, bits);
-}
-#endif /* PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY */
-
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
 static void debug_print_pk(const mbedtls_ssl_context *ssl, int level,
                            const char *file, int line,
                            const char *text, const mbedtls_pk_context *pk)
@@ -412,21 +270,14 @@ static void debug_print_pk(const mbedtls_ssl_context *ssl, int level,
         mbedtls_snprintf(name, sizeof(name), "%s%s", text, items[i].name);
         name[sizeof(name) - 1] = '\0';
 
-#if defined(MBEDTLS_RSA_C)
         if (items[i].type == MBEDTLS_PK_DEBUG_MPI) {
             mbedtls_debug_print_mpi(ssl, level, file, line, name, items[i].value);
         } else
-#endif /* MBEDTLS_RSA_C */
-#if defined(PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY)
-        if (items[i].type == MBEDTLS_PK_DEBUG_PSA_RSA) {
-            mbedtls_debug_print_psa_rsa(ssl, level, file, line, name, items[i].value);
+#if defined(MBEDTLS_ECP_C)
+        if (items[i].type == MBEDTLS_PK_DEBUG_ECP) {
+            mbedtls_debug_print_ecp(ssl, level, file, line, name, items[i].value);
         } else
-#endif /* PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY */
-#if defined(PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY)
-        if (items[i].type == MBEDTLS_PK_DEBUG_PSA_EC) {
-            mbedtls_debug_print_psa_ec(ssl, level, file, line, name, items[i].value);
-        } else
-#endif /* PSA_WANT_KEY_TYPE_ECC_PUBLIC_KEY */
+#endif
         { debug_send_line(ssl, level, file, line,
                           "should not happen\n"); }
     }
@@ -441,7 +292,7 @@ static void debug_print_line_by_line(const mbedtls_ssl_context *ssl, int level,
     start = text;
     for (cur = text; *cur != '\0'; cur++) {
         if (*cur == '\n') {
-            size_t len = (size_t) (cur - start) + 1;
+            size_t len = cur - start + 1;
             if (len > DEBUG_BUF_SIZE - 1) {
                 len = DEBUG_BUF_SIZE - 1;
             }
@@ -485,6 +336,54 @@ void mbedtls_debug_print_crt(const mbedtls_ssl_context *ssl, int level,
         crt = crt->next;
     }
 }
-#endif /* MBEDTLS_X509_CRT_PARSE_C && MBEDTLS_X509_REMOVE_INFO */
+#endif /* MBEDTLS_X509_CRT_PARSE_C */
+
+#if defined(MBEDTLS_ECDH_C)
+static void mbedtls_debug_printf_ecdh_internal(const mbedtls_ssl_context *ssl,
+                                               int level, const char *file,
+                                               int line,
+                                               const mbedtls_ecdh_context *ecdh,
+                                               mbedtls_debug_ecdh_attr attr)
+{
+#if defined(MBEDTLS_ECDH_LEGACY_CONTEXT)
+    const mbedtls_ecdh_context *ctx = ecdh;
+#else
+    const mbedtls_ecdh_context_mbed *ctx = &ecdh->ctx.mbed_ecdh;
+#endif
+
+    switch (attr) {
+        case MBEDTLS_DEBUG_ECDH_Q:
+            mbedtls_debug_print_ecp(ssl, level, file, line, "ECDH: Q",
+                                    &ctx->Q);
+            break;
+        case MBEDTLS_DEBUG_ECDH_QP:
+            mbedtls_debug_print_ecp(ssl, level, file, line, "ECDH: Qp",
+                                    &ctx->Qp);
+            break;
+        case MBEDTLS_DEBUG_ECDH_Z:
+            mbedtls_debug_print_mpi(ssl, level, file, line, "ECDH: z",
+                                    &ctx->z);
+            break;
+        default:
+            break;
+    }
+}
+
+void mbedtls_debug_printf_ecdh(const mbedtls_ssl_context *ssl, int level,
+                               const char *file, int line,
+                               const mbedtls_ecdh_context *ecdh,
+                               mbedtls_debug_ecdh_attr attr)
+{
+#if defined(MBEDTLS_ECDH_LEGACY_CONTEXT)
+    mbedtls_debug_printf_ecdh_internal(ssl, level, file, line, ecdh, attr);
+#else
+    switch (ecdh->var) {
+        default:
+            mbedtls_debug_printf_ecdh_internal(ssl, level, file, line, ecdh,
+                                               attr);
+    }
+#endif
+}
+#endif /* MBEDTLS_ECDH_C */
 
 #endif /* MBEDTLS_DEBUG_C */

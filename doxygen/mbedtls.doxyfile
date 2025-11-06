@@ -1,4 +1,4 @@
-PROJECT_NAME           = "Mbed TLS v4.0.0"
+PROJECT_NAME           = "mbed TLS v2.28.3"
 OUTPUT_DIRECTORY       = ../apidoc/
 FULL_PATH_NAMES        = NO
 OPTIMIZE_OUTPUT_FOR_C  = YES
@@ -6,11 +6,11 @@ EXTRACT_ALL            = YES
 EXTRACT_PRIVATE        = YES
 EXTRACT_STATIC         = YES
 CASE_SENSE_NAMES       = NO
-INPUT                  = ../include input ../tf-psa-crypto/include ../tests/include/alt-dummy
+INPUT                  = ../include input
 FILE_PATTERNS          = *.h
-EXCLUDE                = ../tf-psa-crypto/include/mbedtls/private
 RECURSIVE              = YES
 EXCLUDE_SYMLINKS       = YES
+EXCLUDE_PATTERNS       = *_internal.h *_wrap.h
 SOURCE_BROWSER         = YES
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
@@ -19,11 +19,7 @@ HTML_OUTPUT            = .
 HTML_TIMESTAMP         = YES
 SEARCHENGINE           = YES
 GENERATE_LATEX         = NO
-GENERATE_XML           = YES
-MACRO_EXPANSION        = YES
-EXPAND_ONLY_PREDEF     = YES
-INCLUDE_PATH           = ../include ../tf-psa-crypto/include ../tf-psa-crypto/drivers/builtin/include
-EXPAND_AS_DEFINED      = MBEDTLS_PRIVATE
+INCLUDE_PATH           = ../include
 CLASS_DIAGRAMS         = NO
 HAVE_DOT               = YES
 DOT_GRAPH_MAX_NODES    = 200
@@ -44,13 +40,3 @@ DOT_TRANSPARENT        = YES
 #     \retval #PSA_ERROR_INSUFFICIENT_MEMORY \emptydescription
 # This avoids writing redundant text and keeps Clang happy.
 ALIASES += emptydescription=""
-
-# Define away Mbed TLS macros that make parsing definitions difficult.
-# MBEDTLS_DEPRECATED is not included in this list as it's important to
-# display deprecated status in the documentation.
-PREDEFINED             = "MBEDTLS_CHECK_RETURN_CRITICAL="   \
-                         "MBEDTLS_CHECK_RETURN_TYPICAL="    \
-                         "MBEDTLS_CHECK_RETURN_OPTIONAL="   \
-                         "MBEDTLS_PRINTF_ATTRIBUTE(a,b)="   \
-                         "__DOXYGEN__"                      \
-

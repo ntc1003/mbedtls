@@ -3,7 +3,19 @@
 # run-test-suites.pl
 #
 # Copyright The Mbed TLS Contributors
-# SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 =head1 SYNOPSIS
 
@@ -28,7 +40,6 @@ use strict;
 use utf8;
 use open qw(:std utf8);
 
-use Cwd qw(getcwd);
 use Getopt::Long qw(:config auto_help gnu_compat);
 use Pod::Usage;
 
@@ -41,8 +52,7 @@ GetOptions(
 
 # All test suites = executable files with a .datax file.
 my @suites = ();
-my @test_dirs = qw(../tf-psa-crypto/tests .);
-for my $data_file (map {glob "$_/test_suite_*.datax"} @test_dirs) {
+for my $data_file (glob 'test_suite_*.datax') {
     (my $base = $data_file) =~ s/\.datax$//;
     push @suites, $base if -x $base;
     push @suites, "$base.exe" if -e "$base.exe";
@@ -61,8 +71,8 @@ my $skip_re =
       ')(\z|\.)' );
 
 # in case test suites are linked dynamically
-$ENV{'LD_LIBRARY_PATH'} = getcwd() . "/../library";
-$ENV{'DYLD_LIBRARY_PATH'} = $ENV{'LD_LIBRARY_PATH'}; # For macOS
+$ENV{'LD_LIBRARY_PATH'} = '../library';
+$ENV{'DYLD_LIBRARY_PATH'} = '../library';
 
 my $prefix = $^O eq "MSWin32" ? '' : './';
 
@@ -77,13 +87,8 @@ sub pad_print_center {
     print $padchar x( $padlen ), " $string ", $padchar x( $padlen ), "\n";
 }
 
-for my $suite_path (@suites)
+for my $suite (@suites)
 {
-    my ($dir, $suite) = ('.', $suite_path);
-    if ($suite =~ m!(.*)/([^/]*)!) {
-        $dir = $1;
-        $suite = $2;
-    }
     print "$suite ", "." x ( 72 - length($suite) - 2 - 4 ), " ";
     if( $suite =~ /$skip_re/o ) {
         print "SKIP\n";
@@ -91,7 +96,7 @@ for my $suite_path (@suites)
         next;
     }
 
-    my $command = "cd $dir && $prefix$suite";
+    my $command = "$prefix$suite";
     if( $verbose ) {
         $command .= ' -v';
     }

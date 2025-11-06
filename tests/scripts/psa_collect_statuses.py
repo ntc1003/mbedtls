@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 """Describe the test coverage of PSA functions in terms of return statuses.
 
-1. Build Mbed TLS with -DRECORD_PSA_STATUS_COVERAGE_LOG
+1. Build Mbed Crypto with -DRECORD_PSA_STATUS_COVERAGE_LOG
 2. Run psa_collect_statuses.py
 
 The output is a series of line of the form "psa_foo PSA_ERROR_XXX". Each
 function/status combination appears only once.
 
-This script must be run from the top of an Mbed TLS source tree.
+This script must be run from the top of an Mbed Crypto source tree.
 The build command is "make -DRECORD_PSA_STATUS_COVERAGE_LOG", which is
 only supported with make (as opposed to CMake or other build methods).
 """
 
 # Copyright The Mbed TLS Contributors
-# SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 import os
@@ -21,7 +33,7 @@ import subprocess
 import sys
 
 DEFAULT_STATUS_LOG_FILE = 'tests/statuses.log'
-DEFAULT_PSA_CONSTANT_NAMES = 'tf-psa-crypto/programs/psa/psa_constant_names'
+DEFAULT_PSA_CONSTANT_NAMES = 'programs/psa/psa_constant_names'
 
 class Statuses:
     """Information about observed return statues of API functions."""
@@ -34,7 +46,7 @@ class Statuses:
     def collect_log(self, log_file_name):
         """Read logs from RECORD_PSA_STATUS_COVERAGE_LOG.
 
-        Read logs produced by running Mbed TLS test suites built with
+        Read logs produced by running Mbed Crypto test suites built with
         -DRECORD_PSA_STATUS_COVERAGE_LOG.
         """
         with open(log_file_name) as log:
@@ -70,7 +82,7 @@ class Statuses:
 def collect_status_logs(options):
     """Build and run unit tests and report observed function return statuses.
 
-    Build Mbed TLS with -DRECORD_PSA_STATUS_COVERAGE_LOG, run the
+    Build Mbed Crypto with -DRECORD_PSA_STATUS_COVERAGE_LOG, run the
     test suites and display information about observed return statuses.
     """
     rebuilt = False
@@ -78,25 +90,23 @@ def collect_status_logs(options):
         os.remove(options.log_file)
     if not os.path.exists(options.log_file):
         if options.clean_before:
-            subprocess.check_call(['make', '-f', 'scripts/legacy.make', 'clean'],
+            subprocess.check_call(['make', 'clean'],
                                   cwd='tests',
                                   stdout=sys.stderr)
         with open(os.devnull, 'w') as devnull:
-            make_q_ret = subprocess.call(['make', '-f', 'scripts/legacy.make',
-                                          '-q', 'lib', 'tests'],
+            make_q_ret = subprocess.call(['make', '-q', 'lib', 'tests'],
                                          stdout=devnull, stderr=devnull)
         if make_q_ret != 0:
-            subprocess.check_call(['make', '-f', 'scripts/legacy.make',
-                                   'RECORD_PSA_STATUS_COVERAGE_LOG=1'],
+            subprocess.check_call(['make', 'RECORD_PSA_STATUS_COVERAGE_LOG=1'],
                                   stdout=sys.stderr)
             rebuilt = True
-        subprocess.check_call(['make', '-f', 'scripts/legacy.make', 'test'],
+        subprocess.check_call(['make', 'test'],
                               stdout=sys.stderr)
     data = Statuses()
     data.collect_log(options.log_file)
     data.get_constant_names(options.psa_constant_names)
     if rebuilt and options.clean_after:
-        subprocess.check_call(['make', '-f', 'scripts/legacy.make', 'clean'],
+        subprocess.check_call(['make', 'clean'],
                               cwd='tests',
                               stdout=sys.stderr)
     return data

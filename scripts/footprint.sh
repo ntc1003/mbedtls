@@ -1,15 +1,27 @@
 #!/bin/sh
 #
 # Copyright The Mbed TLS Contributors
-# SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 #
 # Purpose
 #
-# This script determines ROM size (or code size) for the standard Mbed TLS
+# This script determines ROM size (or code size) for the standard mbed TLS
 # configurations, when built for a Cortex M3/M4 target.
 #
 # Configurations included:
-#   default    include/mbedtls/mbedtls_config.h
+#   default    include/mbedtls/config.h
 #   thread     configs/config-thread.h
 #   suite-b    configs/config-suite-b.h
 #   psk        configs/config-ccm-psk-tls1_2.h
@@ -18,18 +30,10 @@
 #
 set -eu
 
-CONFIG_H='include/mbedtls/mbedtls_config.h'
-CRYPTO_CONFIG_H='tf-psa-crypto/include/psa/crypto_config.h'
+CONFIG_H='include/mbedtls/config.h'
 
-if [ ! -r $CONFIG_H ]; then
+if [ -r $CONFIG_H ]; then :; else
     echo "$CONFIG_H not found" >&2
-    echo "This script needs to be run from the root of" >&2
-    echo "a git checkout or uncompressed tarball" >&2
-    exit 1
-fi
-
-if [ ! -r $CRYPTO_CONFIG_H ]; then
-    echo "$CRYPTO_CONFIG_H not found" >&2
     echo "This script needs to be run from the root of" >&2
     echo "a git checkout or uncompressed tarball" >&2
     exit 1
@@ -64,38 +68,27 @@ doit()
     log "$NAME ($FILE):"
 
     cp $CONFIG_H ${CONFIG_H}.bak
-    cp $CRYPTO_CONFIG_H ${CRYPTO_CONFIG_H}.bak
     if [ "$FILE" != $CONFIG_H ]; then
-        CRYPTO_FILE="${FILE%/*}/crypto-${FILE##*/}"
         cp "$FILE"  $CONFIG_H
-        cp "$CRYPTO_FILE"  $CRYPTO_CONFIG_H
     fi
 
     {
-        scripts/config.py unset MBEDTLS_HAVE_TIME || true
-        scripts/config.py unset MBEDTLS_HAVE_TIME_DATE || true
         scripts/config.py unset MBEDTLS_NET_C || true
         scripts/config.py unset MBEDTLS_TIMING_C || true
         scripts/config.py unset MBEDTLS_FS_IO || true
-        scripts/config.py unset MBEDTLS_PSA_ITS_FILE_C || true
-        scripts/config.py unset MBEDTLS_PSA_CRYPTO_STORAGE_C || true
-        scripts/config.py unset MBEDTLS_PSA_BUILTIN_GET_ENTROPY || true
-        # Force the definition of MBEDTLS_PSA_DRIVER_GET_ENTROPY as it may
-        # not exist in custom configurations.
-        scripts/config.py --force -f ${CRYPTO_CONFIG_H} set MBEDTLS_PSA_DRIVER_GET_ENTROPY || true
+        scripts/config.py --force set MBEDTLS_NO_PLATFORM_ENTROPY || true
     } >/dev/null 2>&1
 
-    make -f scripts/legacy.make clean >/dev/null
+    make clean >/dev/null
     CC=arm-none-eabi-gcc AR=arm-none-eabi-ar LD=arm-none-eabi-ld \
-        CFLAGS="$ARMGCC_FLAGS" make -f scripts/legacy.make lib >/dev/null
+        CFLAGS="$ARMGCC_FLAGS" make lib >/dev/null
 
     OUT="size-${NAME}.txt"
     arm-none-eabi-size -t library/libmbed*.a > "$OUT"
     log "$( head -n1 "$OUT" )"
     log "$( tail -n1 "$OUT" )"
 
-    mv ${CONFIG_H}.bak $CONFIG_H
-    mv ${CRYPTO_CONFIG_H}.bak $CRYPTO_CONFIG_H
+    cp ${CONFIG_H}.bak $CONFIG_H
 }
 
 # truncate the file just this time
@@ -115,11 +108,11 @@ else
 fi
 
 log ""
-log "Mbed TLS $MBEDTLS_VERSION$GIT_VERSION"
+log "mbed TLS $MBEDTLS_VERSION$GIT_VERSION"
 log "$( arm-none-eabi-gcc --version | head -n1 )"
 log "CFLAGS=$ARMGCC_FLAGS"
 
-doit default    include/mbedtls/mbedtls_config.h
+doit default    include/mbedtls/config.h
 doit thread     configs/config-thread.h
 doit suite-b    configs/config-suite-b.h
 doit psk        configs/config-ccm-psk-tls1_2.h

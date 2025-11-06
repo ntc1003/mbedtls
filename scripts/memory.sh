@@ -7,11 +7,23 @@
 # since for memory we want debug information.
 #
 # Copyright The Mbed TLS Contributors
-# SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 set -eu
 
-CONFIG_H='include/mbedtls/mbedtls_config.h'
+CONFIG_H='include/mbedtls/config.h'
 
 CLIENT='mini_client'
 
@@ -34,7 +46,7 @@ if [ $( uname ) != Linux ]; then
 fi
 
 if git status | grep -F $CONFIG_H >/dev/null 2>&1; then
-    echo "mbedtls_config.h not clean" >&2
+    echo "config.h not clean" >&2
     exit 1
 fi
 
@@ -59,8 +71,8 @@ do_config()
 
     printf "    Executable size... "
 
-    make -f ./scripts/legacy.make clean
-    CFLAGS=$CFLAGS_EXEC make -f ./scripts/legacy.make OFLAGS=-Os lib >/dev/null 2>&1
+    make clean
+    CFLAGS=$CFLAGS_EXEC make OFLAGS=-Os lib >/dev/null 2>&1
     cd programs
     CFLAGS=$CFLAGS_EXEC make OFLAGS=-Os ssl/$CLIENT >/dev/null
     strip ssl/$CLIENT
@@ -69,8 +81,8 @@ do_config()
 
     printf "    Peak ram usage... "
 
-    make -f ./scripts/legacy.make clean
-    CFLAGS=$CFLAGS_MEM make -f ./scripts/legacy.make OFLAGS=-Os lib >/dev/null 2>&1
+    make clean
+    CFLAGS=$CFLAGS_MEM make OFLAGS=-Os lib >/dev/null 2>&1
     cd programs
     CFLAGS=$CFLAGS_MEM make OFLAGS=-Os ssl/$CLIENT >/dev/null
     cd ..
@@ -103,8 +115,8 @@ rm -f massif.out.*
 
 printf "building server... "
 
-make -f ./scripts/legacy.make clean
-make -f ./scripts/legacy.make lib >/dev/null 2>&1
+make clean
+make lib >/dev/null 2>&1
 (cd programs && make ssl/ssl_server2) >/dev/null
 cp programs/ssl/ssl_server2 .
 
@@ -117,13 +129,13 @@ do_config   "ccm-psk-tls1_2" \
             "psk=000102030405060708090A0B0C0D0E0F"
 
 do_config   "suite-b" \
-            "MBEDTLS_BASE64_C MBEDTLS_PEM_PARSE_C" \
+            "MBEDTLS_BASE64_C MBEDTLS_PEM_PARSE_C MBEDTLS_CERTS_C" \
             ""
 
 # cleanup
 
 mv $CONFIG_BAK $CONFIG_H
-make -f scripts/legacy.make clean
+make clean
 rm ssl_server2
 
 exit $FAILED
